@@ -16,13 +16,15 @@ import (
 //	enum : request value must is one of the enum value
 //	regex : regex , between in / ... /
 type bindingMatrix struct {
-	Field   reflect.StructField
-	Name    string
-	CanNull bool
-	Default string
-	Min     string
-	Max     string
-	Enum    string
+	Field       reflect.StructField
+	Name        string
+	CanNull     bool
+	Default     string
+	Min         string
+	Max         string
+	Enum        string
+	Description string
+	Inlines     []bindingMatrix
 }
 
 func newBindingMatrix(p reflect.StructField) *bindingMatrix {
@@ -46,6 +48,8 @@ func newBindingMatrix(p reflect.StructField) *bindingMatrix {
 				bm.Max = string(t[4 : len(t)-1])
 			} else if strings.HasPrefix(t, "enum(") && strings.HasSuffix(t, ")") {
 				bm.Enum = string(t[5 : len(t)-1])
+			} else if strings.HasPrefix(t, "description(") && strings.HasSuffix(t, ")") {
+				bm.Description = string(t[12 : len(t)-1])
 			}
 		}
 	}

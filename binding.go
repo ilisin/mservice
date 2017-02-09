@@ -34,19 +34,21 @@ import (
 const BINDING_TAG = "req"
 
 type Binding struct {
-	Ctx *Context
-	Typ reflect.Type
-	Val reflect.Value
+	//Ctx *Context
+	Typ            reflect.Type
+	IsContext      bool
+	BindingMatrix []bindingMatrix
+	//Val reflect.Value
 }
 
-func newBinding(ctx *Context, typ reflect.Type, val reflect.Value) *Binding {
+func newBinding(typ reflect.Type) *Binding {
 	return &Binding{
-		Ctx: ctx,
+		//Ctx: ctx,
 		Typ: typ,
 	}
 }
 
-func (b *Binding) MapTo() (reflect.Value, error) {
+func (b *Binding) MapTo(ctx *Context) (reflect.Value, error) {
 	v := reflect.New(b.Typ)
 	//v := b.Val
 	if b.Typ.Kind() != reflect.Struct {
@@ -58,7 +60,7 @@ func (b *Binding) MapTo() (reflect.Value, error) {
 	for i := 0; i < b.Typ.NumField(); i++ {
 		bm := newBindingMatrix(b.Typ.Field(i))
 		vv := v.Field(i)
-		_, err := bm.ValueTo(vv, b.Ctx.QueryParam(bm.Name))
+		_, err := bm.ValueTo(vv, ctx.QueryParam(bm.Name))
 		if err != nil {
 			return v.Addr(), err
 		}
@@ -66,16 +68,17 @@ func (b *Binding) MapTo() (reflect.Value, error) {
 	return v.Addr(), nil
 }
 
-func (b *Binding) fillValue(v reflect.Value) error {
-	typ := b.Typ
-	val := b.Val
-	if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
-		typ = typ.Elem()
-		val = val.Elem()
-	}
-	if typ.Kind() != reflect.Struct {
-		return errors.New("param's type error")
-	}
-
-	return nil
-}
+//
+//func (b *Binding) fillValue(v reflect.Value) error {
+//	typ := b.Typ
+//	val := b.Val
+//	if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
+//		typ = typ.Elem()
+//		val = val.Elem()
+//	}
+//	if typ.Kind() != reflect.Struct {
+//		return errors.New("param's type error")
+//	}
+//
+//	return nil
+//}

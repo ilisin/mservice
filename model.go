@@ -99,13 +99,20 @@ func wrapperHandler(v reflect.Value) (MSHandlerFunc, error) {
 		return nil, errors.New("the value isn't a function")
 	}
 	t := reflect.TypeOf(v.Interface())
-	ints := make([]reflect.Type, t.NumIn())
+	//ints := make([]reflect.Type, t.NumIn())
+	bindings := make([]*Binding, t.NumIn())
 	for i := 0; i < t.NumIn(); i++ {
 		tt := t.In(i)
 		if tt.Kind() != reflect.Ptr || tt.Elem().Kind() != reflect.Struct {
 			return nil, errors.New("the return function's in param isn't a struct pointer")
 		}
-		ints[i] = tt.Elem()
+		//ints[i] = tt.Elem()
+		val := reflect.New(tt.Elem())
+		binding := newBinding(tt.Elem())
+		if _, ok := val.Interface().(*Context); ok {
+			binding.IsContext = true
+		}
+		bindings[i] = binding
 	}
 	// (error) ro (*{},error)
 	if t.NumOut() != 1 && t.NumOut() != 2 {
@@ -113,17 +120,16 @@ func wrapperHandler(v reflect.Value) (MSHandlerFunc, error) {
 	}
 
 	return func(c *Context) error {
-		pins := make([]reflect.Value, len(ints))
-		for i, it := range ints {
-			logrus.Error(it.Kind())
+		pins := make([]reflect.Value, len(bindings))
+		for i, bd := range bindings {
 			// context
-			val := reflect.New(it)
-			if nc, ok := val.Interface().(*Context); ok {
+			if bd.IsContext {
+				val := reflect.New(bd.Typ)
+				nc, _ := val.Interface().(*Context)
 				nc.Context = c
 				pins[i] = reflect.ValueOf(nc)
 			} else {
-				binding := newBinding(c, it, val)
-				vv, err := binding.MapTo()
+				vv, err := bd.MapTo(c)
 				// map error
 				if err != nil {
 					return c.JSON(http.StatusOK, &Response{
