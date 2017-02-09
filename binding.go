@@ -27,9 +27,11 @@
 package mservice
 
 import (
-	"reflect"
 	"errors"
+	"reflect"
 )
+
+const BINDING_TAG = "req"
 
 type Binding struct {
 	Ctx *Context
@@ -37,22 +39,43 @@ type Binding struct {
 	Val reflect.Value
 }
 
-func newBinding(ctx *Context,typ reflect.Type,val reflect.Value) *Binding{
+func newBinding(ctx *Context, typ reflect.Type, val reflect.Value) *Binding {
 	return &Binding{
-		Ctx:ctx,
-		Typ:typ,
+		Ctx: ctx,
+		Typ: typ,
 	}
 }
 
-func (b *Binding)MapTo() (reflect.Value,error){
+func (b *Binding) MapTo() (reflect.Value, error) {
 	v := reflect.New(b.Typ)
+	//v := b.Val
 	if b.Typ.Kind() != reflect.Struct {
-		return v,errors.New("reflect type error")
+		return v, errors.New("reflect type error")
 	}
-	b.fillValue(v)
-	return v,nil
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	for i := 0; i < b.Typ.NumField(); i++ {
+		bm := newBindingMatrix(b.Typ.Field(i))
+		vv := v.Field(i)
+		_, err := bm.ValueTo(vv, b.Ctx.QueryParam(bm.Name))
+		if err != nil {
+			return v.Addr(), err
+		}
+	}
+	return v.Addr(), nil
 }
 
-func (b *Binding)fillValue(v reflect.Value){
+func (b *Binding) fillValue(v reflect.Value) error {
+	typ := b.Typ
+	val := b.Val
+	if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
+		typ = typ.Elem()
+		val = val.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		return errors.New("param's type error")
+	}
 
+	return nil
 }

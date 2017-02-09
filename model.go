@@ -1,14 +1,14 @@
 package mservice
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
-	"errors"
 
-	"github.com/labstack/echo"
 	"github.com/Sirupsen/logrus"
+	"github.com/labstack/echo"
 )
 
 const META_PREFIX = "MS"
@@ -41,9 +41,10 @@ type Model struct {
 }
 
 type Meta struct {
-	Method  HTTPMethod
-	Path    string
-	Handler MSHandlerFunc
+	Method      HTTPMethod
+	Path        string
+	Description string
+	Handler     MSHandlerFunc
 }
 
 func NewModel(prefix string, proto interface{}) *Model {
@@ -65,77 +66,79 @@ func autoHandlerCheck(v reflect.Value, m reflect.Method) (*Meta, bool) {
 		return nil, false
 	}
 	// none param in is void param
-	if m.Type.NumIn() != 1 || m.Type.NumOut() != 3 {
+	if m.Type.NumIn() != 1 || m.Type.NumOut() != 4 {
 		return nil, false
 	}
-	if m.Type.Out(0).Kind() != reflect.String || m.Type.Out(1).Kind() != reflect.String {
+	if m.Type.Out(0).Kind() != reflect.String || m.Type.Out(1).Kind() != reflect.String ||
+		m.Type.Out(2).Kind() != reflect.String {
 		return nil, false
 	}
 	rets := v.Call([]reflect.Value{})
 	meta := &Meta{}
 	ok := false
-	meta.Method, ok = rets[0].Interface().(HTTPMethod)
-	if !ok {
+	if meta.Method, ok = rets[0].Interface().(HTTPMethod); !ok {
 		return nil, false
 	}
-	meta.Path, ok = rets[1].Interface().(string)
-	if !ok {
+	if meta.Path, ok = rets[1].Interface().(string); !ok {
 		return nil, false
 	}
-	h,err := wrapperHandler(rets[2])
+	if meta.Description, ok = rets[2].Interface().(string); !ok {
+		return nil, false
+	}
+	h, err := wrapperHandler(rets[3])
 	if err != nil {
 		logrus.Error(err)
-		return nil,false
+		return nil, false
 	}
 	meta.Handler = h
 	return meta, true
 }
 
-func wrapperHandler(v reflect.Value) (MSHandlerFunc,error){
+func wrapperHandler(v reflect.Value) (MSHandlerFunc, error) {
 	if v.Kind() != reflect.Func {
-		return nil,errors.New("the value isn't a function")
+		return nil, errors.New("the value isn't a function")
 	}
 	t := reflect.TypeOf(v.Interface())
-	ints := make([]reflect.Type,t.NumIn())
-	for i := 0;i < t.NumIn();i++{
+	ints := make([]reflect.Type, t.NumIn())
+	for i := 0; i < t.NumIn(); i++ {
 		tt := t.In(i)
-		if tt.Kind() != reflect.Ptr || tt.Elem().Kind() != reflect.Struct{
-			return nil,errors.New("the return function's in param isn't a struct pointer")
+		if tt.Kind() != reflect.Ptr || tt.Elem().Kind() != reflect.Struct {
+			return nil, errors.New("the return function's in param isn't a struct pointer")
 		}
 		ints[i] = tt.Elem()
 	}
 	// (error) ro (*{},error)
 	if t.NumOut() != 1 && t.NumOut() != 2 {
-		return nil,errors.New("the return function's out param isn't a error or pointer and error")
+		return nil, errors.New("the return function's out param isn't a error or pointer and error")
 	}
 
-	return func(c *Context) error{
-		pins := make([]reflect.Value,len(ints))
-		for i,it := range ints{
+	return func(c *Context) error {
+		pins := make([]reflect.Value, len(ints))
+		for i, it := range ints {
 			logrus.Error(it.Kind())
 			// context
 			val := reflect.New(it)
-			if _,ok := val.Interface().(*Context);ok{
-				logrus.Error("contex:",i)
-				pins[i] = reflect.ValueOf(c)
-			}else{
-				binding := newBinding(c,it,val)
-				vv,err := binding.MapTo()
+			if nc, ok := val.Interface().(*Context); ok {
+				nc.Context = c
+				pins[i] = reflect.ValueOf(nc)
+			} else {
+				binding := newBinding(c, it, val)
+				vv, err := binding.MapTo()
 				// map error
 				if err != nil {
-					return c.JSON(http.StatusOK,&Response{
-						Error:ErrValidate,
-						Message:fmt.Sprintf("%v",err),
-						Data:nil,
+					return c.JSON(http.StatusOK, &Response{
+						Error:   ErrValidate,
+						Message: fmt.Sprintf("%v", err),
+						Data:    nil,
 					})
 				}
-				pins[i]= vv
+				pins[i] = vv
 			}
 		}
 		rets := v.Call(pins)
 		response := mapToResponse(rets)
-		return c.JSON(http.StatusOK,response)
-	},nil
+		return c.JSON(http.StatusOK, response)
+	}, nil
 }
 
 func (m *Model) ReadHandlers() (metas []*Meta) {

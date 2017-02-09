@@ -2,7 +2,6 @@ package mservice
 
 import (
 	"github.com/labstack/echo"
-	"github.com/labstack/echo/engine/standard"
 	"github.com/labstack/echo/middleware"
 	"github.com/labstack/gommon/log"
 )
@@ -63,8 +62,8 @@ func (ms *MService) AddPrototype(prefix string, p interface{}) {
 func (ms *MService) Run() {
 	ms.Middleware()
 	ms.Route()
-	ms.e.Logger().Infof("Service run at %v", ms.config.Host)
-	ms.e.Run(standard.New(ms.config.Host))
+	ms.e.Logger.Infof("Service run at %v", ms.config.Host)
+	ms.e.Start(ms.config.Host)
 }
 
 func NewMService() *MService {
@@ -72,10 +71,10 @@ func NewMService() *MService {
 		models: make([]*Model, 0),
 	}
 	ms.e = echo.New()
-	ms.e.SetLogLevel(log.DEBUG)
+	ms.e.Logger.SetLevel(log.DEBUG)
 	config, err := LoadAConfig()
 	if err != nil {
-		ms.e.Logger().Fatal(err)
+		ms.e.Logger.Fatal(err)
 	}
 	ms.config = config
 	return ms
